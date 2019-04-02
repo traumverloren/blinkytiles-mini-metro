@@ -1,4 +1,4 @@
-# blinkytiles-teensy
+# blinkytiles-mini-metro
 Controlling blinkytiles using a ~~Teensy 3.2~~ Adafruit Mini Metro
 
 Switched to Mini Metro so can power Blinkytiles with 5V as 3V was not working well.
