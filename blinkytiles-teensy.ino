@@ -1,6 +1,11 @@
 #include <DmxSimple.h>
 #include <FastLED.h>
 #include <SoftwareSerial.h>
+#include <ArduinoJson.h>
+
+#if FASTLED_VERSION < 3001000
+#error "Requires FastLED 3.1 or later; check github for latest code."
+#endif
 
 SoftwareSerial HWSERIAL(6,7); // RX, TX
 
@@ -9,209 +14,187 @@ SoftwareSerial HWSERIAL(6,7); // RX, TX
 #define LED_TYPE    DMXSIMPLE
 #define COLOR_ORDER BGR
 
-// The brightness of our pixels (0 to 255).
-// 0 is off.
-// 16 is dim.
-// 64 is medium.
-// 128 is bright.
-// 255 is blindingly bright!
-
-#define BRIGHTNESS  8
-#define MIN_BRIGHTNESS 8  // watch the power!
-#define MAX_BRIGHTNESS 64  
-
 CRGB leds[NUM_LEDS];
+
+// animation blend
+CRGB leds2[NUM_LEDS];
+CRGB leds3[NUM_LEDS];
+
+enum mode {modeTwinkle, modeConfetti};
+mode currentMode = modeTwinkle;
 
 const byte numChars = 32;
 char receivedChars[numChars];
-unsigned int currentPatternIndex = 0;
 boolean newData = false;
 
-enum mode {modeSlowFade, modeBlueDots, modeRandomColors, modeBreathing, modeEase};
-mode currentMode = modeEase;
+#define BRIGHTNESS   255
 
-int hue = 0;
-int divisor = 30;
-byte currentLed = 0;
+uint8_t newHue;
+uint8_t gHue = 160; // rotating "base color" used by many of the patterns
 
-int thisdelay = 15; // easing mode
+// Base background color
+CHSV BASE_COLOR(gHue, 255, 32);
+
+// Peak color to twinkle up to
+CHSV PEAK_COLOR(gHue, 255, 160);
+
+// Currently set to brighten up a bit faster than it dims down, 
+// but this can be adjusted.
+
+// Amount to increment the color by each loop as it gets brighter:
+CHSV DELTA_COLOR_UP(gHue, 255, 12);
+
+// Amount to decrement the color by each loop as it gets dimmer:
+CHSV DELTA_COLOR_DOWN(gHue, 255, 12);
+
+// Chance of each pixel starting to brighten up.  
+// 1 or 2 = a few brightening pixels at a time.
+// 10 = lots of pixels brightening at a time.
+uint8_t chanceOfTwinkle = 0;
 
 void setup() {
-  delay(3000); // sanity check
-  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-  FastLED.setCorrection(TypicalLEDStrip);
+  
+  delay(3000);
+  FastLED.addLeds<LED_TYPE,LED_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
+  
   Serial.begin(9600);
   HWSERIAL.begin(9600);
   Serial.println("<Arduino is ready>");
+  InitPixelStates();
 }
 
 void loop() {
-
   switch(currentMode)
   {
-    case modeBlueDots:
-      Serial.print("blue dots\n");
-      blueDots();
-      break; 
-    case modeBreathing:
-      breathing();
-      break;
-    case modeEase:
-      ease();
-      break;
-    case modeSlowFade:
-      slowFade();
-      break;
-    case modeRandomColors:
-      randomColors();
+     case modeConfetti:
+      EVERY_N_MILLISECONDS(100) {
+        confetti();
+        FastLED.show();
+      }
+     case modeTwinkle:
+      EVERY_N_MILLISECONDS( 10 ) {
+        twinkle(leds, chanceOfTwinkle);
+        FastLED.show();
+      }
       break;
     default:
       break;
   }
-  recvWithStartEndMarkers();
+  receiveMsg();
 }
 
-void trigger() {
-  if (strcmp(receivedChars, "person") == 0) {
-    Serial.println(receivedChars);
-    currentMode = modeSlowFade;
-  } else {
-    Serial.println("other: ");
-    Serial.println(receivedChars);
-    currentMode = modeBlueDots;
-  }
-  newData = false;
-}
-
-// Credit: http://forum.arduino.cc/index.php?topic=396450
-void recvWithStartEndMarkers() {
-  static boolean recvInProgress = false;
-  static byte ndx = 0;
-  char startMarker = '<';
-  char endMarker = '>';
-  char rc;
-
+void receiveMsg() {
   while (HWSERIAL.available() > 0 && newData == false) {
-    rc = HWSERIAL.read();
+    String json;
+    json = HWSERIAL.readString();
+  
+    // Allocate the JSON document
+    //
+    // Inside the brackets, 200 is the capacity of the memory pool in bytes.
+    // Don't forget to change this value to match your JSON document.
+    // Use arduinojson.org/v6/assistant to compute the capacity.
+    StaticJsonDocument<400> doc;
+  
+    // StaticJsonDocument<N> allocates memory on the stack, it can be
+    // replaced by DynamicJsonDocument which allocates in the heap.
+    //
+    // DynamicJsonDocument doc(200);
+  
+    // JSON input string.
+    //
+    // Using a char[], as shown here, enables the "zero-copy" mode. This mode uses
+    // the minimal amount of memory because the JsonDocument stores pointers to
+    // the input buffer.
+    // If you use another type of input, ArduinoJson must copy the strings from
+    // the input to the JsonDocument, so you need to increase the capacity of the
+    // JsonDocument.
+  
+    // Deserialize the JSON document
+    DeserializationError error = deserializeJson(doc, json);
+  
+    // Test if parsing succeeds.
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      return;
+    }
+  
+    // Fetch values.
+    //
+    // Most of the time, you can rely on the implicit casts.
+    // In other case, you can do doc["time"].as<long>();
+    uint8_t numberOfPeople = doc["person"];
+  
+    // Print values.
+    // serializeJsonPretty(doc, Serial);
+    String stringOne = "I see ";
+    String stringTwo = " people";
+    String peopleString = stringOne + numberOfPeople + stringTwo;
+    Serial.println(peopleString);
 
-    if (recvInProgress == true) {
+    newData = true;
+    if (numberOfPeople > 0) {
+      chanceOfTwinkle = 1;
+//      Must deal with interrupts to use confetti!
+//      https://github.com/FastLED/FastLED/wiki/Interrupt-problems
+//      currentMode = modeConfetti;
+//    } else if (numberOfPeople == 1) {
+//      chanceOfTwinkle = 1;
+    } else if (numberOfPeople == 0) {
+      chanceOfTwinkle = 0;
+    }
+    newData = false;
+  }
+}
 
-      if (rc != endMarker) {
-        receivedChars[ndx] = rc;
-        ndx++;
-        if (ndx >= numChars) {
-            ndx = numChars - 1;
-        }
+enum { SteadyDim, GettingBrighter, GettingDimmerAgain };
+uint8_t PixelState[NUM_LEDS];
+
+void InitPixelStates()
+{
+  memset( PixelState, sizeof(PixelState), SteadyDim); // initialize all the pixels to SteadyDim.
+  fill_solid( leds, NUM_LEDS, BASE_COLOR);
+}
+
+void confetti() 
+{
+  // random colored speckles that blink in and fade smoothly
+  fadeToBlackBy(leds, NUM_LEDS, BRIGHTNESS*0.8);
+  int pos = random16(NUM_LEDS);
+  leds[pos] += CHSV( gHue + random8(64), 200, 255);
+  FastLED.show();
+}
+
+void twinkle(CRGB tmp[NUM_LEDS], uint8_t chance)
+{
+  for( uint16_t i = 0; i < NUM_LEDS; i++) {
+    if( PixelState[i] == SteadyDim) {
+      // this pixels is currently: SteadyDim
+      // so we randomly consider making it start getting brighter
+      if( random8() < chance) {
+        PixelState[i] = GettingBrighter;
       }
-      else {
-        receivedChars[ndx] = '\0'; // terminate the string
-        recvInProgress = false;
-        ndx = 0;
-        newData = true;
-        trigger();
+    } else if( PixelState[i] == GettingBrighter ) {
+      // this pixels is currently: GettingBrighter
+      // so if it's at peak color, switch it to getting dimmer again
+      if( tmp[i] >= PEAK_COLOR ) {
+        PixelState[i] = GettingDimmerAgain;
+      } else {
+        // otherwise, just keep brightening it:
+        tmp[i] += DELTA_COLOR_UP;
+      }
+      
+    } else { // getting dimmer again
+      // this pixels is currently: GettingDimmerAgain
+      // so if it's back to base color, switch it to steady dim
+      if( tmp[i] <= BASE_COLOR ) {
+        tmp[i] = BASE_COLOR; // reset to exact base color, in case we overshot
+        PixelState[i] = SteadyDim;
+      } else {
+        // otherwise, just keep dimming it down:
+        tmp[i] -= DELTA_COLOR_DOWN;
       }
     }
-    else if (rc == startMarker) {
-      recvInProgress = true;
-    }
   }
-}
-
-
-// Helper function that blends one uint8_t toward another by a given amount
-void nblendU8TowardU8( uint8_t& cur, const uint8_t target, uint8_t amount)
-{
-  if( cur == target) return;
-  
-  if( cur < target ) {
-    uint8_t delta = target - cur;
-    delta = scale8_video( delta, amount);
-    cur += delta;
-  } else {
-    uint8_t delta = cur - target;
-    delta = scale8_video( delta, amount);
-    cur -= delta;
-  }
-}
-
-// Blend one CRGB color toward another CRGB color by a given amount.
-// Blending is linear, and done in the RGB color space.
-// This function modifies 'cur' in place.
-CRGB fadeTowardColor( CRGB& cur, const CRGB& target, uint8_t amount)
-{
-  nblendU8TowardU8( cur.red,   target.red,   amount);
-  nblendU8TowardU8( cur.green, target.green, amount);
-  nblendU8TowardU8( cur.blue,  target.blue,  amount);
-  return cur;
-}
-
-// Fade an entire array of CRGBs toward a given background color by a given amount
-// This function modifies the pixel array in place.
-void fadeTowardColor( CRGB* L, uint16_t N, const CRGB& bgColor, uint8_t fadeAmount)
-{
-  for( uint16_t i = 0; i < N; i++) {
-    fadeTowardColor( L[i], bgColor, fadeAmount);
-  }
-}
-
-void randomColors() {
-  CRGB bgColor( 0, 15, 2); // pine green ?
-  
-  // fade all existing pixels toward bgColor by "5" (out of 255)
-  fadeTowardColor( leds, NUM_LEDS, bgColor, 5);
-
-  // periodically set random pixel to a random color, to show the fading
-  EVERY_N_MILLISECONDS( 50 ) {
-    uint16_t pos = random16( NUM_LEDS);
-    CRGB color = CHSV( random8(), 255, 255);
-    leds[ pos ] = color;
-  }
-  FastLED.show();
-}
-
-void blueDots() {
-  for(int dot = 0; dot < NUM_LEDS; dot++) { 
-    leds[dot] = CRGB::Blue;
-    FastLED.show();
-    // clear this led for the next time around the loop
-    leds[dot] = CRGB::Black;
-    delay(100);
-  }
-}
-
-void slowFade() {
-  hue++;
-  fill_solid(leds, NUM_LEDS, CHSV(hue, 255, 255));
-  FastLED.show();
-}
-
-void breathing () {
- float breath = (exp(sin(millis()/5000.0*PI)) - 0.36787944)*108.0;
- breath = map(breath, 0, 255, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
- FastLED.setBrightness(breath);
- fill_rainbow(leds, NUM_LEDS, (hue++/divisor));
- if(hue == (255 * divisor)) {
-   hue = 0;
- }
- FastLED.show();
- delay(1);
-}
-
-void ease() {
-  EVERY_N_MILLISECONDS(thisdelay) {  // FastLED based non-blocking delay to update/display the sequence.
-    static uint8_t easeOutVal = 0;
-    static uint8_t easeInVal  = 128;
-    static uint8_t lerpVal    = 0;
-  
-    easeOutVal = ease8InOutQuad(easeInVal);  // Start with easeInVal at 0 and then go to 255 for the full easing.
-    easeInVal++;
-  
-    lerpVal = lerp8by8(0, NUM_LEDS, easeOutVal);  // Map it to the number of LED's you have.
-  
-    leds[lerpVal] = CRGB::White;
-    fadeToBlackBy(leds, NUM_LEDS, 2);  // 8 bit, 1 = slow fade, 255 = fast fade
-    
-  }
-  FastLED.show();
 }
