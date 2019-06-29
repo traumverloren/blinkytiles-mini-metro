@@ -89,6 +89,7 @@ void loop() {
     showNewData();
 }
 
+// ref: https://forum.arduino.cc/index.php?topic=396450.0
 void recvBytesWithStartEndMarkers() {
     static boolean recvInProgress = false;
     byte rb;
