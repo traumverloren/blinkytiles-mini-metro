@@ -1,3 +1,6 @@
+#define FASTLED_ALLOW_INTERRUPTS 0
+#define FASTLED_INTERRUPT_RETRY_COUNT 1
+
 #include <DmxSimple.h>
 #include <FastLED.h>
 #include <SoftwareSerial.h>
@@ -22,10 +25,6 @@ CRGB leds3[NUM_LEDS];
 
 enum mode {modeTwinkle, modeConfetti};
 mode currentMode = modeTwinkle;
-
-const byte numChars = 32;
-char receivedChars[numChars];
-boolean newData = false;
 
 #define BRIGHTNESS   255
 
@@ -52,8 +51,13 @@ CHSV DELTA_COLOR_DOWN(gHue, 255, 12);
 // 10 = lots of pixels brightening at a time.
 uint8_t chanceOfTwinkle = 0;
 
+// For receiving serial port messages from RPI
+byte peopleCount;
+boolean newData = false;
+static byte startMarker = 0x3C;
+static byte endMarker = 0x3E;
+
 void setup() {
-  
   delay(3000);
   FastLED.addLeds<LED_TYPE,LED_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
@@ -65,24 +69,72 @@ void setup() {
 }
 
 void loop() {
-  switch(currentMode)
-  {
-     case modeConfetti:
-      EVERY_N_MILLISECONDS(100) {
-        confetti();
-        FastLED.show();
-      }
-     case modeTwinkle:
-      EVERY_N_MILLISECONDS( 10 ) {
-        twinkle(leds, chanceOfTwinkle);
-        FastLED.show();
-      }
-      break;
-    default:
-      break;
-  }
-  receiveMsg();
+    switch(currentMode)
+    {
+       case modeConfetti:
+        EVERY_N_MILLISECONDS(200) {
+          confetti();
+          FastLED.show();
+        }
+       case modeTwinkle:
+        EVERY_N_MILLISECONDS( 10 ) {
+          twinkle(leds, chanceOfTwinkle);
+          FastLED.show();
+        }
+        break;
+      default:
+        break;
+    }
+    recvBytesWithStartEndMarkers();
+    showNewData();
 }
+
+void recvBytesWithStartEndMarkers() {
+    static boolean recvInProgress = false;
+    byte rb;
+   
+    while (HWSERIAL.available() > 0 && newData == false) {
+        rb = HWSERIAL.read();
+
+        if (recvInProgress == true) {
+            if (rb != endMarker) {
+                peopleCount = rb;
+            }
+            else {
+                recvInProgress = false;
+                newData = true;
+            }
+        }
+        else if (rb == startMarker) {
+            recvInProgress = true;
+        }
+    }
+}
+
+void showNewData() {
+    if (newData == true) {
+        Serial.print(peopleCount, HEX);
+        Serial.println(' ');
+        if (peopleCount > 1) {
+          chanceOfTwinkle = 1;
+          currentMode = modeConfetti;
+        } else if (peopleCount == 1) {
+          chanceOfTwinkle = 1;
+          currentMode = modeTwinkle;
+        } else if (peopleCount == 0) {
+          chanceOfTwinkle = 0;
+          currentMode = modeTwinkle;
+        }
+        newData = false;
+    }
+}
+
+
+
+
+
+
+
 
 void receiveMsg() {
   while (HWSERIAL.available() > 0 && newData == false) {
@@ -138,11 +190,12 @@ void receiveMsg() {
       chanceOfTwinkle = 1;
 //      Must deal with interrupts to use confetti!
 //      https://github.com/FastLED/FastLED/wiki/Interrupt-problems
-//      currentMode = modeConfetti;
+      currentMode = modeConfetti;
 //    } else if (numberOfPeople == 1) {
 //      chanceOfTwinkle = 1;
     } else if (numberOfPeople == 0) {
       chanceOfTwinkle = 0;
+      currentMode = modeTwinkle;
     }
     newData = false;
   }
@@ -159,11 +212,11 @@ void InitPixelStates()
 
 void confetti() 
 {
+  
   // random colored speckles that blink in and fade smoothly
   fadeToBlackBy(leds, NUM_LEDS, BRIGHTNESS*0.8);
   int pos = random16(NUM_LEDS);
   leds[pos] += CHSV( gHue + random8(64), 200, 255);
-  FastLED.show();
 }
 
 void twinkle(CRGB tmp[NUM_LEDS], uint8_t chance)
