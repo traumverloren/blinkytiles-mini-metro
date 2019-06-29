@@ -1,5 +1,5 @@
-#define FASTLED_ALLOW_INTERRUPTS 0
-#define FASTLED_INTERRUPT_RETRY_COUNT 1
+//#define FASTLED_ALLOW_INTERRUPTS 0
+//#define FASTLED_INTERRUPT_RETRY_COUNT 1
 
 #include <DmxSimple.h>
 #include <FastLED.h>
@@ -16,6 +16,7 @@ SoftwareSerial HWSERIAL(6,7); // RX, TX
 #define NUM_LEDS    7
 #define LED_TYPE    DMXSIMPLE
 #define COLOR_ORDER BGR
+#define BRIGHTNESS   128
 
 CRGB leds[NUM_LEDS];
 
@@ -23,19 +24,20 @@ CRGB leds[NUM_LEDS];
 CRGB leds2[NUM_LEDS];
 CRGB leds3[NUM_LEDS];
 
-enum mode {modeTwinkle, modeConfetti};
+enum mode {modeTwinkle, modeConfetti, modeRainbow, modeRainbowWithGlitter, modeFade};
+
+// set the default starting LED program
 mode currentMode = modeTwinkle;
 
-#define BRIGHTNESS   255
-
+uint8_t framesPerSecond = 60;
 uint8_t newHue;
-uint8_t gHue = 160; // rotating "base color" used by many of the patterns
+uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 
 // Base background color
-CHSV BASE_COLOR(gHue, 255, 32);
+CHSV BASE_COLOR(gHue, 255, 64);
 
 // Peak color to twinkle up to
-CHSV PEAK_COLOR(gHue, 255, 160);
+CHSV PEAK_COLOR(gHue, 255, 192);
 
 // Currently set to brighten up a bit faster than it dims down, 
 // but this can be adjusted.
@@ -72,19 +74,37 @@ void loop() {
     switch(currentMode)
     {
        case modeConfetti:
-        EVERY_N_MILLISECONDS(200) {
           confetti();
-          FastLED.show();
-        }
+          break;
        case modeTwinkle:
-        EVERY_N_MILLISECONDS( 10 ) {
           twinkle(leds, chanceOfTwinkle);
-          FastLED.show();
-        }
-        break;
+          break;
+       case modeRainbow:
+          rainbow();
+          break;
+      case modeRainbowWithGlitter:
+          rainbowWithGlitter();
+          break;
+      case modeFade:
+          fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 5);
+          break;
       default:
         break;
     }
+
+    if (currentMode == modeTwinkle) {
+       // fade all existing pixels toward bgColor by "5" (out of 255)
+       fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 5);
+    }
+
+    // send the 'leds' array out to the actual LED strip
+    FastLED.show();  
+    // insert a delay to keep the framerate modest
+    FastLED.delay(1000/framesPerSecond); 
+  
+    // do some periodic updates
+    EVERY_N_MILLISECONDS( 20 ) { gHue++; } // slowly cycle the "base color" through the rainbow
+
     recvBytesWithStartEndMarkers();
     showNewData();
 }
@@ -118,13 +138,13 @@ void showNewData() {
         Serial.println(' ');
         if (peopleCount > 1) {
           chanceOfTwinkle = 1;
-          currentMode = modeConfetti;
+          currentMode = modeRainbow;
         } else if (peopleCount == 1) {
           chanceOfTwinkle = 1;
-          currentMode = modeTwinkle;
+          currentMode = modeFade;
         } else if (peopleCount == 0) {
           chanceOfTwinkle = 0;
-          currentMode = modeTwinkle;
+          currentMode = modeFade;
         }
         newData = false;
     }
@@ -139,6 +159,25 @@ void InitPixelStates()
   fill_solid( leds, NUM_LEDS, BASE_COLOR);
 }
 
+void rainbow() 
+{
+  // FastLED's built-in rainbow generator
+  fill_rainbow( leds, NUM_LEDS, gHue, 7);
+}
+
+void rainbowWithGlitter() 
+{
+  // built-in FastLED rainbow, plus some random sparkly glitter
+  rainbow();
+  addGlitter(10);
+}
+
+void addGlitter( fract8 chanceOfGlitter) 
+{
+  if( random8() < chanceOfGlitter) {
+    leds[ random8(NUM_LEDS) ] += CRGB::White;
+  }
+}
 void confetti() 
 {
   
@@ -178,5 +217,50 @@ void twinkle(CRGB tmp[NUM_LEDS], uint8_t chance)
         tmp[i] -= DELTA_COLOR_DOWN;
       }
     }
+  }
+}
+
+void sinelon()
+{
+  // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+  int pos = beatsin16( 13, 0, NUM_LEDS-1 );
+  leds[pos] += CHSV( gHue, 255, 192);
+}
+
+
+// Helper function that blends one uint8_t toward another by a given amount
+void nblendU8TowardU8( uint8_t& cur, const uint8_t target, uint8_t amount)
+{
+  if( cur == target) return;
+  
+  if( cur < target ) {
+    uint8_t delta = target - cur;
+    delta = scale8_video( delta, amount);
+    cur += delta;
+  } else {
+    uint8_t delta = cur - target;
+    delta = scale8_video( delta, amount);
+    cur -= delta;
+  }
+}
+
+// Blend one CRGB color toward another CRGB color by a given amount.
+// Blending is linear, and done in the RGB color space.
+// This function modifies 'cur' in place.
+CRGB fadeTowardColor( CRGB& cur, const CRGB& target, uint8_t amount)
+{
+  nblendU8TowardU8( cur.red,   target.red,   amount);
+  nblendU8TowardU8( cur.green, target.green, amount);
+  nblendU8TowardU8( cur.blue,  target.blue,  amount);
+  return cur;
+}
+
+// Fade an entire array of CRGBs toward a given background color by a given amount
+// This function modifies the pixel array in place.
+void fadeTowardColor( CRGB* L, uint16_t N, const CRGB& bgColor, uint8_t fadeAmount)
+{
+  for( uint16_t i = 0; i < N; i++) {
+    fadeTowardColor( L[i], bgColor, fadeAmount);
   }
 }
