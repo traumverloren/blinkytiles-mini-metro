@@ -55,11 +55,11 @@ uint8_t chanceOfTwinkle = 1;
 // For receiving serial port messages from RPI
 byte peopleCount;
 boolean newData = false;
-static byte startMarker = 0x3C;
+static byte startMarker = 0X3D;
 static byte endMarker = 0x3E;
 
 void setup() {
-  delay(3000);
+  delay(4000);
   FastLED.addLeds<LED_TYPE,LED_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
   
@@ -110,7 +110,6 @@ void recvBytesWithStartEndMarkers() {
    
     while (HWSERIAL.available() > 0 && newData == false) {
         rb = HWSERIAL.read();
-
         if (recvInProgress == true) {
             if (rb != endMarker) {
                 peopleCount = rb;
@@ -126,16 +125,15 @@ void recvBytesWithStartEndMarkers() {
     }
 }
 
+// REFACTOR THIS SINCE IT'S GETTING TOO BIG!
 void showNewData() {
     if (newData == true) {
-        Serial.print(peopleCount, HEX);
-        Serial.println(' ');
+        Serial.println(peopleCount);
         if (peopleCount > 0) {
           chanceOfTwinkle = 1;
           if (currentMode != modeRainbow) {
               for ( uint16_t i = 0; i < 255; i++) {
                 fadeTowardRainbow( leds, NUM_LEDS, 2);
-                  Serial.println(gHue);
                   FastLED.show();
                   FastLED.delay(10);
               }
@@ -150,7 +148,7 @@ void showNewData() {
               for ( uint16_t i = 0; i < 255; i++) {
                   fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
                   FastLED.show();
-                  FastLED.delay(10);
+                  FastLED.delay(15);
               }
               currentMode = modeTwinkle;
           }
