@@ -1,6 +1,3 @@
-//#define FASTLED_ALLOW_INTERRUPTS 0
-//#define FASTLED_INTERRUPT_RETRY_COUNT 1
-
 #include <DmxSimple.h>
 #include <FastLED.h>
 #include <SoftwareSerial.h>
@@ -18,10 +15,6 @@ SoftwareSerial HWSERIAL(6,7); // RX, TX
 #define BRIGHTNESS   200
 
 CRGB leds[NUM_LEDS];
-
-// animation blend
-CRGB leds2[NUM_LEDS];
-CRGB leds3[NUM_LEDS];
 
 enum mode {modeTwinkle, modeConfetti, modeRainbow, modeRainbowWithGlitter, modeFade};
 
@@ -76,7 +69,8 @@ void loop() {
           confetti();
           break;
        case modeTwinkle:
-          twinkle(leds, chanceOfTwinkle);
+//          twinkle(leds, chanceOfTwinkle);
+          sinelon2();
           break;
        case modeRainbow:
           rainbow();
@@ -226,14 +220,75 @@ void twinkle(CRGB tmp[NUM_LEDS], uint8_t chance)
   }
 }
 
+
+// Define variables used by the sequences.
+uint8_t thisbeat =  random8(20);                                       // Beats per minute for first part of dot.
+uint8_t thatbeat =  random8(50);                                       // Combined the above with this one.
+uint8_t thisfade =   32;                                       // How quickly does it fade? Lower = slower fade rate.
+uint8_t  thissat = 255;                                       // The saturation, where 255 = brilliant colours.
+uint8_t  thisbri = 255;
+
+void sinelon2() {                                              // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( leds, NUM_LEDS, thisfade);
+  int pos1 = beatsin16( thisbeat, 0, NUM_LEDS-1 );
+  int pos2 = beatsin16( thatbeat, 0, NUM_LEDS-1 );
+
+  int correctedPos1;
+  int correctedPos2;
+  if (pos1 == 0) {
+    correctedPos1 = 1;
+  } else if (pos1 == 1) {
+    correctedPos1 = 0; 
+  } else if (pos1 == 2) {
+    correctedPos1 = 3;
+  } else if (pos1 == 3) {
+    correctedPos1 = 4;
+  } else if (pos1 == 4) {
+    correctedPos1 = 2;
+  } else {
+    correctedPos1 = pos1;
+  }
+
+  if (pos2 == 0) {
+    correctedPos2 = 1;
+  } else if (pos2 == 1) {
+    correctedPos2 = 0; 
+  } else if (pos2 == 2) {
+    correctedPos2 = 3;
+  } else if (pos2 == 3) {
+    correctedPos2 = 4;
+  } else if (pos2 == 4) {
+    correctedPos2 = 2;
+  } else {
+    correctedPos2 = pos2;
+  }
+
+  leds[(correctedPos1+correctedPos2)/2] += CHSV( gHue, 255, 192 );
+}
+
 void sinelon()
 {
   // a colored dot sweeping back and forth, with fading trails
   fadeToBlackBy( leds, NUM_LEDS, 20);
-  int pos = beatsin16( 13, 0, NUM_LEDS-1 );
-  leds[pos] += CHSV( gHue, 255, 192);
+//  int pos = beatsin16( 13, 0, NUM_LEDS-1 );
+  byte pos = beatsin16( 20, 0, NUM_LEDS-1 );
+  byte correctedPos;
+  if (pos == 0) {
+    correctedPos = 1;
+  } else if (pos == 1) {
+    correctedPos = 0; 
+  } else if (pos == 2) {
+    correctedPos = 3;
+  } else if (pos == 3) {
+    correctedPos = 4;
+  } else if (pos == 4) {
+    correctedPos = 2;
+  } else {
+    correctedPos = pos;
+  }
+  
+  leds[correctedPos] += CHSV( gHue, 255, 192);
 }
-
 
 // Helper function that blends one uint8_t toward another by a given amount
 void nblendU8TowardU8( uint8_t& cur, const uint8_t target, uint8_t amount)
