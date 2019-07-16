@@ -12,18 +12,32 @@ SoftwareSerial HWSERIAL(6,7); // RX, TX
 #define NUM_LEDS    7
 #define LED_TYPE    DMXSIMPLE
 #define COLOR_ORDER BGR
-#define BRIGHTNESS   200
+#define BRIGHTNESS  200
 
 CRGB leds[NUM_LEDS];
 
-enum mode {modeTwinkle, modeConfetti, modeRainbow, modeRainbowWithGlitter, modeFade};
+enum mode {modeTwinkle, modeConfetti, modeRainbow, modeRainbowWithGlitter, modeFade, modeHighChaos, modeCalmerChaos, modeCalmerSinelon};
 
 // set the default starting LED program
-mode currentMode = modeTwinkle;
+mode currentMode = modeCalmerChaos;
 
-uint8_t framesPerSecond = 60;
+uint8_t framesPerSecond = 10;  // 10 for start with sinelon + random leds, 30 for Sinelon, 60 normally for rest
 uint8_t newHue;
 uint8_t gHue = 160; // rotating "base color" used by many of the patterns
+
+
+// SINELON //
+//
+CRGBPalette16 currentPalette;
+CRGBPalette16 targetPalette;
+TBlendType    currentBlending;                                // NOBLEND or LINEARBLEND
+
+
+// Define variables used by the sequences.
+uint8_t thisfade =  30;                                       // How quickly does it fade? Lower = slower fade rate.
+uint8_t  thissat = 255;                                       // The saturation, where 255 = brilliant colours.
+uint8_t  thisbri = 255;                                       // Brightness of a sequence.
+int        myhue =   0;
 
 // Base background color
 CHSV BASE_COLOR(gHue, 255, 60);
@@ -51,16 +65,23 @@ boolean newData = false;
 static byte startMarker = 0X3D;
 static byte endMarker = 0x3E;
 
+// SETUP
 void setup() {
   delay(4000);
   FastLED.addLeds<LED_TYPE,LED_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
-  
+  set_max_power_in_volts_and_milliamps(5, 500);               // FastLED Power management set at 5V, 500mA.
+
   Serial.begin(9600);
   HWSERIAL.begin(9600);
-  Serial.println("<Arduino is ready>");
+  Serial.println("<Arduino is ready>"); 
+
+  currentBlending = LINEARBLEND;
+  
   InitPixelStates();
-}
+} // setup()
+
+
 
 void loop() {
     switch(currentMode)
@@ -69,8 +90,19 @@ void loop() {
           confetti();
           break;
        case modeTwinkle:
-//          twinkle(leds, chanceOfTwinkle);
-          sinelon2();
+          twinkle(leds, chanceOfTwinkle);
+          break;
+       case modeHighChaos:
+          framesPerSecond = 10;
+          sinelon3();
+          break;
+       case modeCalmerChaos:
+          framesPerSecond = 15;
+          sinelon3();
+          break;
+       case modeCalmerSinelon:
+          framesPerSecond = 30;
+          sinelon3();
           break;
        case modeRainbow:
           rainbow();
@@ -85,6 +117,16 @@ void loop() {
         break;
     }
 
+      EVERY_N_MILLISECONDS(100) {
+        uint8_t maxChanges = 24; 
+        nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);   // AWESOME palette blending capability.
+      }
+    
+      EVERY_N_SECONDS(5) {                                        // Change the target palette to a random one every 5 seconds.
+        static uint8_t baseC = random8();                         // You can use this as a baseline colour if you want similar hues in the next line.
+        targetPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 192, random8(128,255)), CHSV(random8(), 255, random8(128,255)));
+      }
+
     // send the 'leds' array out to the actual LED strip
     FastLED.show();  
     // insert a delay to keep the framerate modest
@@ -95,7 +137,7 @@ void loop() {
 
     recvBytesWithStartEndMarkers();
     showNewData();
-}
+} // loop()
 
 // ref: https://forum.arduino.cc/index.php?topic=396450.0
 void recvBytesWithStartEndMarkers() {
@@ -117,7 +159,7 @@ void recvBytesWithStartEndMarkers() {
             recvInProgress = true;
         }
     }
-}
+} // recvBytesWithStartEndMarkers()
 
 // REFACTOR THIS SINCE IT'S GETTING TOO BIG!
 void showNewData() {
@@ -149,7 +191,7 @@ void showNewData() {
         }
         newData = false;
     }
-}
+} // showNewData()
 
 enum { SteadyDim, GettingBrighter, GettingDimmerAgain };
 uint8_t PixelState[NUM_LEDS];
@@ -158,7 +200,7 @@ void InitPixelStates()
 {
   memset( PixelState, sizeof(PixelState), SteadyDim); // initialize all the pixels to SteadyDim.
   fill_solid( leds, NUM_LEDS, BASE_COLOR);
-}
+} // InitPixelStates()
 
 void rainbow() 
 {
@@ -220,75 +262,71 @@ void twinkle(CRGB tmp[NUM_LEDS], uint8_t chance)
   }
 }
 
+void sinelon3() {                               // a colored dot sweeping back and forth, with fading trails
 
-// Define variables used by the sequences.
-uint8_t thisbeat =  random8(20);                                       // Beats per minute for first part of dot.
-uint8_t thatbeat =  random8(50);                                       // Combined the above with this one.
-uint8_t thisfade =   32;                                       // How quickly does it fade? Lower = slower fade rate.
-uint8_t  thissat = 255;                                       // The saturation, where 255 = brilliant colours.
-uint8_t  thisbri = 255;
-
-void sinelon2() {                                              // a colored dot sweeping back and forth, with fading trails
   fadeToBlackBy( leds, NUM_LEDS, thisfade);
-  int pos1 = beatsin16( thisbeat, 0, NUM_LEDS-1 );
-  int pos2 = beatsin16( thatbeat, 0, NUM_LEDS-1 );
+  int pos;
+  int correctedPos;
 
-  int correctedPos1;
-  int correctedPos2;
-  if (pos1 == 0) {
-    correctedPos1 = 1;
-  } else if (pos1 == 1) {
-    correctedPos1 = 0; 
-  } else if (pos1 == 2) {
-    correctedPos1 = 3;
-  } else if (pos1 == 3) {
-    correctedPos1 = 4;
-  } else if (pos1 == 4) {
-    correctedPos1 = 2;
-  } else {
-    correctedPos1 = pos1;
+  if (currentMode == modeHighChaos) 
+  {
+    pos = random8(NUM_LEDS);
+    myhue = random16(255);
+    if (myhue < 100) {
+      myhue = random16(160,224);
+    } else {
+      myhue = random16(96);
+    } 
+  } else if (currentMode == modeCalmerChaos) {
+    pos = random8(NUM_LEDS);
+    myhue++;
+  } else if (currentMode == modeCalmerSinelon) 
+  {
+    pos = beatsin16( 10, 0, NUM_LEDS-1 );
+    if (pos == 0) {
+      correctedPos = 1;
+    } else if (pos == 1) {
+      correctedPos = 0; 
+    } else if (pos == 2) {
+      correctedPos = 3;
+    } else if (pos == 3) {
+      correctedPos = 4;
+    } else if (pos == 4) {
+      correctedPos = 2;
+    } else {
+      correctedPos = pos;
+    }
   }
 
-  if (pos2 == 0) {
-    correctedPos2 = 1;
-  } else if (pos2 == 1) {
-    correctedPos2 = 0; 
-  } else if (pos2 == 2) {
-    correctedPos2 = 3;
-  } else if (pos2 == 3) {
-    correctedPos2 = 4;
-  } else if (pos2 == 4) {
-    correctedPos2 = 2;
-  } else {
-    correctedPos2 = pos2;
-  }
+  leds[pos] += ColorFromPalette(currentPalette, myhue, thisbri, currentBlending);
+} // sinelon()
 
-  leds[(correctedPos1+correctedPos2)/2] += CHSV( gHue, 255, 192 );
-}
 
-void sinelon()
-{
-  // a colored dot sweeping back and forth, with fading trails
-  fadeToBlackBy( leds, NUM_LEDS, 20);
-//  int pos = beatsin16( 13, 0, NUM_LEDS-1 );
-  byte pos = beatsin16( 20, 0, NUM_LEDS-1 );
-  byte correctedPos;
-  if (pos == 0) {
-    correctedPos = 1;
-  } else if (pos == 1) {
-    correctedPos = 0; 
-  } else if (pos == 2) {
-    correctedPos = 3;
-  } else if (pos == 3) {
-    correctedPos = 4;
-  } else if (pos == 4) {
-    correctedPos = 2;
-  } else {
-    correctedPos = pos;
-  }
-  
-  leds[correctedPos] += CHSV( gHue, 255, 192);
-}
+
+//
+//void sinelon() // OG SINELON PROGRAM, THE TRUTH
+//{
+//  // a colored dot sweeping back and forth, with fading trails
+//  fadeToBlackBy( leds, NUM_LEDS, 20);
+////  int pos = beatsin16( 13, 0, NUM_LEDS-1 );
+//  byte pos = beatsin16( 20, 0, NUM_LEDS-1 );
+//  byte correctedPos;
+//  if (pos == 0) {
+//    correctedPos = 1;
+//  } else if (pos == 1) {
+//    correctedPos = 0; 
+//  } else if (pos == 2) {
+//    correctedPos = 3;
+//  } else if (pos == 3) {
+//    correctedPos = 4;
+//  } else if (pos == 4) {
+//    correctedPos = 2;
+//  } else {
+//    correctedPos = pos;
+//  }
+//  
+//  leds[correctedPos] += CHSV( gHue, 255, 192);
+//}
 
 // Helper function that blends one uint8_t toward another by a given amount
 void nblendU8TowardU8( uint8_t& cur, const uint8_t target, uint8_t amount)
