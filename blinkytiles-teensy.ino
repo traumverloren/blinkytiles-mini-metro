@@ -97,7 +97,7 @@ void loop() {
           sinelon3();
           break;
        case modeCalmerChaos:
-          framesPerSecond = 15;
+          framesPerSecond = 8;
           sinelon3();
           break;
        case modeCalmerSinelon:
@@ -122,7 +122,7 @@ void loop() {
         nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);   // AWESOME palette blending capability.
       }
     
-      EVERY_N_SECONDS(5) {                                        // Change the target palette to a random one every 5 seconds.
+      EVERY_N_SECONDS(2) {                                        // Change the target palette to a random one every 5 seconds.
         static uint8_t baseC = random8();                         // You can use this as a baseline colour if you want similar hues in the next line.
         targetPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 192, random8(128,255)), CHSV(random8(), 255, random8(128,255)));
       }
@@ -279,7 +279,11 @@ void sinelon3() {                               // a colored dot sweeping back a
     } 
   } else if (currentMode == modeCalmerChaos) {
     pos = random8(NUM_LEDS);
+    myhue = 0;
     myhue++;
+//    if (myhue == 255) {
+//      myhue = 1;
+//    }
   } else if (currentMode == modeCalmerSinelon) 
   {
     pos = beatsin16( 10, 0, NUM_LEDS-1 );
