@@ -16,12 +16,12 @@ SoftwareSerial HWSERIAL(6,7); // RX, TX
 
 CRGB leds[NUM_LEDS];
 
-enum mode {modeTwinkle, modeConfetti, modeRainbow, modeRainbowWithGlitter, modeFade, modeHighChaos, modeCalmerChaos, modeCalmerSinelon};
+enum mode {modeTwinkle, modeConfetti, modeRainbow, modeRainbowWithGlitter, modeFade, modeHighChaos, modeMidChaos, modeLowChaos};
 
 // set the default starting LED program
-mode currentMode = modeCalmerChaos;
+mode currentMode = modeHighChaos;
 
-uint8_t framesPerSecond = 10;  // 10 for start with sinelon + random leds, 30 for Sinelon, 60 normally for rest
+uint8_t framesPerSecond = 12;  // 12 for start with sinelon + random leds, 30 for Sinelon, 60 normally for rest
 uint8_t newHue;
 uint8_t gHue = 160; // rotating "base color" used by many of the patterns
 
@@ -78,7 +78,7 @@ void setup() {
 
   currentBlending = LINEARBLEND;
   
-  InitPixelStates();
+  //  InitPixelStates();
 } // setup()
 
 
@@ -92,15 +92,27 @@ void loop() {
        case modeTwinkle:
           twinkle(leds, chanceOfTwinkle);
           break;
+       // HighChaos for 0 - 1 people?
        case modeHighChaos:
-          framesPerSecond = 10;
-          sinelon3();
+          if (peopleCount == 0) {
+            framesPerSecond = 25;
+            sinelon3();
+          } else {
+            framesPerSecond = 16;
+            sinelon3();
+          }
           break;
-       case modeCalmerChaos:
-          framesPerSecond = 8;
-          sinelon3();
+       // MidChaos for 2 - 3 people?
+       case modeMidChaos:
+          if (peopleCount == 2) {
+            framesPerSecond = 12;
+            sinelon3();
+          } else {
+            framesPerSecond = 9;
+            sinelon3();
+          }
           break;
-       case modeCalmerSinelon:
+       case modeLowChaos:
           framesPerSecond = 30;
           sinelon3();
           break;
@@ -122,7 +134,7 @@ void loop() {
         nblendPaletteTowardPalette(currentPalette, targetPalette, maxChanges);   // AWESOME palette blending capability.
       }
     
-      EVERY_N_SECONDS(2) {                                        // Change the target palette to a random one every 5 seconds.
+      EVERY_N_SECONDS(1) {                                        // Change the target palette to a random one every 5 seconds.
         static uint8_t baseC = random8();                         // You can use this as a baseline colour if you want similar hues in the next line.
         targetPalette = CRGBPalette16(CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 255, random8(128,255)), CHSV(random8(), 192, random8(128,255)), CHSV(random8(), 255, random8(128,255)));
       }
@@ -165,29 +177,45 @@ void recvBytesWithStartEndMarkers() {
 void showNewData() {
     if (newData == true) {
         Serial.println(peopleCount);
-        if (peopleCount > 0) {
-          chanceOfTwinkle = 1;
-          if (currentMode != modeRainbow) {
+        if (peopleCount < 2) { //2
+            currentMode = modeHighChaos;
+        } else if (peopleCount < 4) { //4
+            currentMode = modeMidChaos;
+        } else if (peopleCount < 6) { //6
+            currentMode = modeLowChaos;
+        } else if (peopleCount < 8) { //8
+          // I DON'T THINK THIS SHOULD BE THE SOLID RAINBOW HERE
+            if (currentMode != modeRainbow) {
               for ( uint16_t i = 0; i < 255; i++) {
                 fadeTowardRainbow( leds, NUM_LEDS, 2);
                   FastLED.show();
                   FastLED.delay(10);
               }
               currentMode = modeRainbow;
-          }
+            }
+//        if (peopleCount > 0) {
+//          chanceOfTwinkle = 1;
+//          if (currentMode != modeRainbow) {
+//              for ( uint16_t i = 0; i < 255; i++) {
+//                fadeTowardRainbow( leds, NUM_LEDS, 2);
+//                  FastLED.show();
+//                  FastLED.delay(10);
+//              }
+//              currentMode = modeRainbow;
+//          }
 //        } else if (peopleCount == 1) {
 //          chanceOfTwinkle = 1;
 //          currentMode = modeTwinkle;
-        } else if (peopleCount == 0) {
-          chanceOfTwinkle = 0;
-          if (currentMode != modeTwinkle) {
-              for ( uint16_t i = 0; i < 255; i++) {
-                  fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
-                  FastLED.show();
-                  FastLED.delay(15);
-              }
-              currentMode = modeTwinkle;
-          }
+//        } else if (peopleCount == 0) {
+//          chanceOfTwinkle = 0;
+//          if (currentMode != modeTwinkle) {
+//              for ( uint16_t i = 0; i < 255; i++) {
+//                  fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
+//                  FastLED.show();
+//                  FastLED.delay(15);
+//              }
+//              currentMode = modeTwinkle;
+//          }
         }
         newData = false;
     }
@@ -277,16 +305,16 @@ void sinelon3() {                               // a colored dot sweeping back a
     } else {
       myhue = random16(96);
     } 
-  } else if (currentMode == modeCalmerChaos) {
+  } else if (currentMode == modeMidChaos) {
     pos = random8(NUM_LEDS);
     myhue = 0;
     myhue++;
 //    if (myhue == 255) {
 //      myhue = 1;
 //    }
-  } else if (currentMode == modeCalmerSinelon) 
+  } else if (currentMode == modeLowChaos) 
   {
-    pos = beatsin16( 10, 0, NUM_LEDS-1 );
+    pos = beatsin16( 18, 0, NUM_LEDS-1 );
     if (pos == 0) {
       correctedPos = 1;
     } else if (pos == 1) {
