@@ -183,6 +183,9 @@ void loop() {
 
 //------------------Button Press Setup------------------
 void shortButtonPress() {
+  if (areLightsOn == false) {
+    return;
+  }
   isCalmWhenCrowded = !isCalmWhenCrowded;
   setProgram();
 }
@@ -224,7 +227,6 @@ void recvBytesWithStartEndMarkers() {
 //------------------SET NEW LIGHT PROGRAM------------------
 void showNewData() {
     if (newData == true) {
-      Serial.println("SHOW NEW DATAAAAAA!!!");
         setProgram();
         newData = false;
     }
@@ -232,38 +234,35 @@ void showNewData() {
 
 // If not getting data, make sure RPI pinouts for Serial in #14 for data & ground above it!!!
 void setProgram() {
-  Serial.print("SET PROGRAM ******\n");  
   if (areLightsOn == false) {
        return;
   } else if (isCalmWhenCrowded == true) {
-        if (peopleCount < 2) { //2 Chaotic, frequently bouncing no color order
+        if (peopleCount < 2) { //0-1 Chaotic, frequently bouncing no color order
             setHighChaosMode(peopleCount);
-        } else if (peopleCount == 3 || peopleCount == 4) { //4 Less Chaotic, has rainbow color order
+        } else if (peopleCount == 2 || peopleCount == 3) { //2-3 Less Chaotic, has rainbow color order
             setMidChaosMode(peopleCount);
-        } else if (peopleCount == 5) { //5 Smooth flow up and down with rainbow color order
+        } else if (peopleCount == 4) { //4 Smooth flow up and down with rainbow color order
             setLowChaosMode(peopleCount);
-        } else if (peopleCount == 6) { //6 All gently lit rotating rainbow with in/out dim/brighten
+        } else if (peopleCount == 5) { //5 All gently lit rotating rainbow with in/out dim/brighten
             setRainbowBreathingMode(peopleCount);
-        } else if (peopleCount == 7) { //7 Go to all blue with twinkle alternating
+        } else if ((peopleCount == 6) || (peopleCount == 7)) { //6-6 Go to all blue with twinkle alternating
             setTwinkleMode(peopleCount);
-        } else if (peopleCount == 8) { //8 Go to all dim blue
-            setTwinkleMode(peopleCount);
-        } else if (peopleCount > 8) { //9+? Go to all dim blue
+        } else if (peopleCount > 8) { //8+? Go to all dim blue
           setDarkMode();
         }
     } else {
         if (peopleCount > 6) { //2 Chaotic, frequently bouncing no color order
             setHighChaosMode(peopleCount);
-        } else if (peopleCount == 5 || peopleCount == 6) { //4 Less Chaotic, has rainbow color order
+        } else if ((peopleCount == 5) || (peopleCount == 6)) { //4 Less Chaotic, has rainbow color order
             setMidChaosMode(peopleCount);
         } else if (peopleCount == 4) { //5 Smooth flow up and down with rainbow color order
             setLowChaosMode(peopleCount);
         } else if (peopleCount == 3) { //6 All gently lit rotating rainbow with in/out dim/brighten
             setRainbowBreathingMode(peopleCount);
-        } else if (peopleCount == 2 || peopleCount == 1) { //7 Go to all blue with twinkle alternating
-          setTwinkleMode(peopleCount);
+        } else if ((peopleCount == 2) || (peopleCount == 1)) { //7 Go to all blue with twinkle alternating
+            setTwinkleMode(peopleCount);
         } else if (peopleCount == 0) { //9+? Go to all dim blue
-              setDarkMode();
+            setDarkMode();
         }
     }
 } 
@@ -310,7 +309,7 @@ void setRainbowBreathingMode(byte peopleCount) {
 }
 
 void setTwinkleMode(byte peopleCount) {
-  if ((peopleCount == 7) || (peopleCount == 2)) {
+  if ((peopleCount == 6) || (peopleCount == 2)) {
     chanceOfTwinkle = 1;
   } else {
     chanceOfTwinkle = 0;
