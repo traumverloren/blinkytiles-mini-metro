@@ -8,6 +8,8 @@
 
 SoftwareSerial HWSERIAL(6,7); // RX, TX
 
+#define ACTIVATED LOW          // button is active low (HIGH = 1, LOW = 0)
+#define BUTTON_PIN 10          // Connect the button to GND and one of the pins. 
 #define LED_PIN     3
 #define NUM_LEDS    7
 #define LED_TYPE    DMXSIMPLE
@@ -16,7 +18,15 @@ SoftwareSerial HWSERIAL(6,7); // RX, TX
 
 CRGB leds[NUM_LEDS];
 
-// For receiving serial port messages from RPI
+//----------initial button setup--------------------
+long buttonTimer = 0;
+long longPressTime = 250;
+
+boolean buttonActive = false;
+boolean longPressActive = false;
+
+
+//---For receiving serial port messages from RPI---
 byte peopleCount;
 boolean newData = false;
 static byte startMarker = 0X3D;
@@ -37,9 +47,15 @@ enum mode {
 // set the default starting LED program
 mode currentMode = modeHighChaos;
 
+boolean isCalmWhenCrowded = true;
+boolean areLightsOn = true;
+
 uint8_t framesPerSecond = 12;  // 12 for start with sinelon + random leds, 30 for Sinelon, 60 normally for rest
 uint8_t newHue;
 uint8_t gHue = 160; // rotating "base color" used by many of the patterns
+
+enum { SteadyDim, GettingBrighter, GettingDimmerAgain };
+uint8_t PixelState[NUM_LEDS];
 
 //
 // SINELON //
@@ -48,13 +64,11 @@ CRGBPalette16 currentPalette;
 CRGBPalette16 targetPalette;
 TBlendType    currentBlending;                                // NOBLEND or LINEARBLEND
 
-
 // Define variables used by the sequences.
 uint8_t thisfade =  30;                                       // How quickly does it fade? Lower = slower fade rate.
 uint8_t  thissat = 255;                                       // The saturation, where 255 = brilliant colours.
 uint8_t  thisbri = 255;                                       // Brightness of a sequence.
 int        myhue =   0;
-
 
 //
 // TWINKLE //
@@ -77,62 +91,69 @@ CHSV DELTA_COLOR_DOWN(gHue, 255, 20);
 uint8_t chanceOfTwinkle = 0;
 
 
-//
-// SETUP //
-//
+//------------------SETUP------------------
 void setup() {
   delay(4000);
   FastLED.addLeds<LED_TYPE,LED_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
-  set_max_power_in_volts_and_milliamps(5, 500);               // FastLED Power management set at 5V, 500mA.
+  set_max_power_in_volts_and_milliamps(5, 500);  // FastLED Power management set at 5V, 500mA.
 
   Serial.begin(9600);
   HWSERIAL.begin(9600);
   Serial.println("<Arduino is ready>"); 
 
   currentBlending = LINEARBLEND;
-} // setup()
 
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+}
 
-//
-// LOOP //
-//
-void loop() {
+//------------------MAIN LOOP------------------
+void loop() { 
+    byte currKeyState = digitalRead(BUTTON_PIN);
+  
+    // button pressed
+    if (currKeyState == ACTIVATED) {
+      if (buttonActive == false) {
+        buttonActive = true;
+        buttonTimer = millis();
+      }
+      if ((millis() - buttonTimer > longPressTime) && (longPressActive == false)) {
+        longPressActive = true;
+        longButtonPress();
+      }
+    // button not pressed
+    } else {
+      if (buttonActive == true) {
+        if (longPressActive == true) {
+          longPressActive = false;
+        } else {
+          shortButtonPress();
+        }
+        buttonActive = false;
+      }
+    }
+
     switch(currentMode)
     {
        // HighChaos for 0 - 1 people?
        case modeHighChaos:
-          if (peopleCount == 0) {
-            framesPerSecond = 25;
-            sinelon();
-          } else {
-            framesPerSecond = 16;
-            sinelon();
-          }
+          setHighChaosMode(peopleCount);
           break;
        // MidChaos for 2 - 3 people?
        case modeMidChaos:
-          if (peopleCount == 2) {
-            framesPerSecond = 12;
-            sinelon();
-          } else {
-            framesPerSecond = 9;
-            sinelon();
-          }
+          setMidChaosMode(peopleCount);
           break;
        case modeLowChaos:
-          framesPerSecond = 30;
-          sinelon();
+          setLowChaosMode(peopleCount);
           break;
        case modeRainbowBreathing:
-          framesPerSecond = 30;
-          rainbowBreathing( leds, NUM_LEDS, 2 );
+          setRainbowBreathingMode(peopleCount);
           break;
        case modeTwinkle:
-          framesPerSecond = 30;
-          twinkle(leds, chanceOfTwinkle);
+          setTwinkleMode(peopleCount);
           break;
       case modeDark:
+          setDarkMode();
           break;
       default:
           break;
@@ -158,10 +179,25 @@ void loop() {
 
     recvBytesWithStartEndMarkers();
     showNewData();
-} // loop()
+}
 
-//
-// Receiving byte over serial from raspberry pi //
+//------------------Button Press Setup------------------
+void shortButtonPress() {
+  isCalmWhenCrowded = !isCalmWhenCrowded;
+  setProgram();
+}
+
+void longButtonPress() {
+  areLightsOn = !areLightsOn;
+  if (areLightsOn == false) {
+    setDarkMode();
+  } else {
+    setProgram();
+  }
+}
+ 
+
+//------------------RECEIVING DATA FROM PI------------------
 // ref: https://forum.arduino.cc/index.php?topic=396450.0
 //
 void recvBytesWithStartEndMarkers() {
@@ -183,71 +219,134 @@ void recvBytesWithStartEndMarkers() {
             recvInProgress = true;
         }
     }
-} // recvBytesWithStartEndMarkers()
+}
 
-// REFACTOR THIS SINCE IT'S GETTING TOO BIG!
+//------------------SET NEW LIGHT PROGRAM------------------
 void showNewData() {
     if (newData == true) {
-        Serial.println(peopleCount);
-        if (peopleCount < 2) { //2 Chaotic, frequently bouncing no color order
-            currentMode = modeHighChaos;
-        } else if (peopleCount == 3 || peopleCount == 4) { //4 Less Chaotic, has rainbow color order
-            currentMode = modeMidChaos;
-        } else if (peopleCount == 5) { //5 Smooth flow up and down with rainbow color order
-            currentMode = modeLowChaos;
-        } else if (peopleCount == 6) { //6 All gently lit rotating rainbow with in/out dim/brighten
-            if (currentMode != modeRainbowBreathing) {
-              for ( uint16_t i = 0; i < 255; i++) {
-                rainbowBreathing(leds, NUM_LEDS, 2);
-                  FastLED.show();
-                  FastLED.delay(10);
-              }
-              currentMode = modeRainbowBreathing;
-            }
-        } else if (peopleCount == 7) { //7 Go to all blue with twinkle alternating
-          chanceOfTwinkle = 1;
-          if (currentMode != modeTwinkle) {
-              for ( uint16_t i = 0; i < 255; i++) {
-                  fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
-                  FastLED.show();
-                  FastLED.delay(15);
-              }
-              currentMode = modeTwinkle;
-          }
-        } else if (peopleCount == 8) { //8 Go to all dim blue
-          chanceOfTwinkle = 0;
-          if (currentMode != modeTwinkle) {
-              for ( uint16_t i = 0; i < 255; i++) {
-                  fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
-                  FastLED.show();
-                  FastLED.delay(15);
-              }
-              InitPixelStates();
-              currentMode = modeTwinkle;
-          }
-        } else if (peopleCount > 8) { //9+? Go to all dim blue
-          currentMode = modeDark;
-          for ( uint16_t i = 0; i < 255; i++) {
-              fadeToBlackBy(leds, NUM_LEDS, BRIGHTNESS*0.1);
-              FastLED.show();
-              FastLED.delay(20);
-          }
-          for ( uint16_t i = 0; i < NUM_LEDS; i++) {
-            leds[0] = CRGB::Black;
-          }
-        }
+      Serial.println("SHOW NEW DATAAAAAA!!!");
+        setProgram();
         newData = false;
     }
-} // showNewData()
+}
 
-enum { SteadyDim, GettingBrighter, GettingDimmerAgain };
-uint8_t PixelState[NUM_LEDS];
+// If not getting data, make sure RPI pinouts for Serial in #14 for data & ground above it!!!
+void setProgram() {
+  Serial.print("SET PROGRAM ******\n");  
+  if (areLightsOn == false) {
+       return;
+  } else if (isCalmWhenCrowded == true) {
+        if (peopleCount < 2) { //2 Chaotic, frequently bouncing no color order
+            setHighChaosMode(peopleCount);
+        } else if (peopleCount == 3 || peopleCount == 4) { //4 Less Chaotic, has rainbow color order
+            setMidChaosMode(peopleCount);
+        } else if (peopleCount == 5) { //5 Smooth flow up and down with rainbow color order
+            setLowChaosMode(peopleCount);
+        } else if (peopleCount == 6) { //6 All gently lit rotating rainbow with in/out dim/brighten
+            setRainbowBreathingMode(peopleCount);
+        } else if (peopleCount == 7) { //7 Go to all blue with twinkle alternating
+            setTwinkleMode(peopleCount);
+        } else if (peopleCount == 8) { //8 Go to all dim blue
+            setTwinkleMode(peopleCount);
+        } else if (peopleCount > 8) { //9+? Go to all dim blue
+          setDarkMode();
+        }
+    } else {
+        if (peopleCount > 6) { //2 Chaotic, frequently bouncing no color order
+            setHighChaosMode(peopleCount);
+        } else if (peopleCount == 5 || peopleCount == 6) { //4 Less Chaotic, has rainbow color order
+            setMidChaosMode(peopleCount);
+        } else if (peopleCount == 4) { //5 Smooth flow up and down with rainbow color order
+            setLowChaosMode(peopleCount);
+        } else if (peopleCount == 3) { //6 All gently lit rotating rainbow with in/out dim/brighten
+            setRainbowBreathingMode(peopleCount);
+        } else if (peopleCount == 2 || peopleCount == 1) { //7 Go to all blue with twinkle alternating
+          setTwinkleMode(peopleCount);
+        } else if (peopleCount == 0) { //9+? Go to all dim blue
+              setDarkMode();
+        }
+    }
+} 
+
+void setHighChaosMode(byte peopleCount) {
+  currentMode = modeHighChaos;
+  if ((peopleCount == 0) || (peopleCount > 6)) {
+    framesPerSecond = 25;
+    sinelon();
+  } else {
+    framesPerSecond = 16;
+    sinelon();
+  }
+}
+
+void setMidChaosMode(byte peopleCount) {
+  currentMode = modeMidChaos;
+  if ((peopleCount == 2) || (peopleCount == 6)) {
+    framesPerSecond = 12;
+    sinelon();
+  } else {
+    framesPerSecond = 9;
+    sinelon();
+  }
+}
+
+void setLowChaosMode(byte peopleCount) {
+  currentMode = modeLowChaos;
+  framesPerSecond = 30;
+  sinelon();
+}
+
+void setRainbowBreathingMode(byte peopleCount) {
+  if (currentMode != modeRainbowBreathing) {
+    for (uint16_t i = 0; i < 100; i++) {
+      rainbowBreathing(leds, NUM_LEDS, 2);
+        FastLED.show();
+        FastLED.delay(5);
+    }
+  }
+  currentMode = modeRainbowBreathing;
+  framesPerSecond = 30;
+  rainbowBreathing( leds, NUM_LEDS, 2 );
+}
+
+void setTwinkleMode(byte peopleCount) {
+  if ((peopleCount == 7) || (peopleCount == 2)) {
+    chanceOfTwinkle = 1;
+  } else {
+    chanceOfTwinkle = 0;
+  }
+  
+  if (currentMode != modeTwinkle) {
+      for ( uint16_t i = 0; i < 100; i++) {
+          fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
+          FastLED.show();
+          FastLED.delay(10);
+      }
+  }
+  currentMode = modeTwinkle;
+  framesPerSecond = 30;
+  twinkle(leds, chanceOfTwinkle);
+}
+
+void setDarkMode() {
+  if (currentMode != modeDark) {
+      for ( uint16_t i = 0; i < 100; i++) {
+          fadeToBlackBy(leds, NUM_LEDS, BRIGHTNESS*0.1);
+          FastLED.show();
+          FastLED.delay(5);
+      }
+      for ( uint16_t i = 0; i < NUM_LEDS; i++) {
+        leds[0] = CRGB::Black;
+      }
+  }
+  currentMode = modeDark;
+}
 
 void InitPixelStates()
 {
   memset( PixelState, sizeof(PixelState), SteadyDim); // initialize all the pixels to SteadyDim.
   fill_solid( leds, NUM_LEDS, BASE_COLOR);
-} // InitPixelStates()
+}
 
 
 void twinkle(CRGB tmp[NUM_LEDS], uint8_t chance)
@@ -305,7 +404,7 @@ void breathing( CRGB* L, uint16_t N, uint8_t fadeAmount ) {
     // shifting the HUE value by incrementing every millisecond this creates the spectrum wave
 }
 
-void sinelon() {                               // a colored dot sweeping back and forth, with fading trails
+void sinelon() {   // a colored dot sweeping back and forth, with fading trails
   fadeToBlackBy( leds, NUM_LEDS, thisfade);
   int pos;
   int correctedPos;
@@ -345,7 +444,7 @@ void sinelon() {                               // a colored dot sweeping back an
   }
 
   leds[pos] += ColorFromPalette(currentPalette, myhue, thisbri, currentBlending);
-} // sinelon()
+}
 
 // Helper function that blends one uint8_t toward another by a given amount
 void nblendU8TowardU8( uint8_t& cur, const uint8_t target, uint8_t amount)
