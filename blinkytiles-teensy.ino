@@ -451,7 +451,7 @@ void sinelon() {   // a colored dot sweeping back and forth, with fading trails
     }
   }
 
-  leds[pos] += ColorFromPalette(currentPalette, myhue, thisbri, currentBlending);
+  leds[correctedPos] += ColorFromPalette(currentPalette, myhue, thisbri, currentBlending);
 }
 
 // Helper function that blends one uint8_t toward another by a given amount
