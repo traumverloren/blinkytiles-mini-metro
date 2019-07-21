@@ -37,7 +37,8 @@ static byte endMarker = 0x3E;
 //
 enum mode {
   modeDark, 
-  modeTwinkle, 
+  modeTwinkle,
+  modeBreathing, 
   modeRainbowBreathing, 
   modeHighChaos, 
   modeMidChaos, 
@@ -135,19 +136,20 @@ void loop() {
 
     switch(currentMode)
     {
-       // HighChaos for 0 - 1 people?
        case modeHighChaos:
-          setHighChaosMode(peopleCount);
+          setHighChaosMode();
           break;
-       // MidChaos for 2 - 3 people?
        case modeMidChaos:
-          setMidChaosMode(peopleCount);
+          setMidChaosMode();
           break;
        case modeLowChaos:
-          setLowChaosMode(peopleCount);
+          setLowChaosMode();
           break;
        case modeRainbowBreathing:
-          setRainbowBreathingMode(peopleCount);
+          setRainbowBreathingMode();
+          break;
+       case modeBreathing:
+          setBreathingMode();
           break;
        case modeTwinkle:
           setTwinkleMode(peopleCount);
@@ -237,75 +239,82 @@ void setProgram() {
   if (areLightsOn == false) {
        return;
   } else if (isCalmWhenCrowded == true) {
-        if (peopleCount < 2) { //0-1 Chaotic, frequently bouncing no color order
-            setHighChaosMode(peopleCount);
-        } else if (peopleCount == 2 || peopleCount == 3) { //2-3 Less Chaotic, has rainbow color order
-            setMidChaosMode(peopleCount);
-        } else if (peopleCount == 4) { //4 Smooth flow up and down with rainbow color order
-            setLowChaosMode(peopleCount);
-        } else if (peopleCount == 5) { //5 All gently lit rotating rainbow with in/out dim/brighten
-            setRainbowBreathingMode(peopleCount);
-        } else if ((peopleCount == 6) || (peopleCount == 7)) { //6-6 Go to all blue with twinkle alternating
+        if (peopleCount == 0) { //0 Chaotic, frequently bouncing no color order
+            setHighChaosMode();
+        } else if (peopleCount == 1) { //1 Less Chaotic, has rainbow color order
+            setMidChaosMode();
+        } else if (peopleCount == 2) { //2 Smooth flow up and down with rainbow color order
+            setLowChaosMode();
+        } else if (peopleCount == 3) { //3 All gently lit rotating rainbow with in/out dim/brighten
+            setRainbowBreathingMode();
+        } else if (peopleCount == 4) { //4 All gently blue with in/out dim/brighten
+            setBreathingMode();
+        } else if ((peopleCount == 5) || (peopleCount == 6)) { //5-6 Go to all blue with twinkle alternating
             setTwinkleMode(peopleCount);
-        } else if (peopleCount > 8) { //8+? Go to all dim blue
+        } else if (peopleCount > 6) { //6+? Go to all dim blue
           setDarkMode();
         }
     } else {
-        if (peopleCount > 6) { //2 Chaotic, frequently bouncing no color order
-            setHighChaosMode(peopleCount);
-        } else if ((peopleCount == 5) || (peopleCount == 6)) { //4 Less Chaotic, has rainbow color order
-            setMidChaosMode(peopleCount);
-        } else if (peopleCount == 4) { //5 Smooth flow up and down with rainbow color order
-            setLowChaosMode(peopleCount);
-        } else if (peopleCount == 3) { //6 All gently lit rotating rainbow with in/out dim/brighten
-            setRainbowBreathingMode(peopleCount);
-        } else if ((peopleCount == 2) || (peopleCount == 1)) { //7 Go to all blue with twinkle alternating
+        if (peopleCount > 6) { //6+ Chaotic, frequently bouncing no color order
+            setHighChaosMode();
+        } else if (peopleCount == 6) { //6 Less Chaotic, has rainbow color order
+            setMidChaosMode();
+        } else if (peopleCount == 5) { //5 Smooth flow up and down with rainbow color order
+            setLowChaosMode();
+        } else if (peopleCount == 4) { //4 All gently lit rotating rainbow with in/out dim/brighten
+            setRainbowBreathingMode();
+        } else if (peopleCount == 3) { //3 All gently lit blue with in/out dim/brighten
+            setBreathingMode();
+        } else if ((peopleCount == 2) || (peopleCount == 1)) { //1-2 Go to all blue with twinkle alternating
             setTwinkleMode(peopleCount);
-        } else if (peopleCount == 0) { //9+? Go to all dim blue
+        } else if (peopleCount == 0) { //0 Go dark
             setDarkMode();
         }
     }
 } 
 
-void setHighChaosMode(byte peopleCount) {
+void setHighChaosMode() {
   currentMode = modeHighChaos;
-  if ((peopleCount == 0) || (peopleCount > 6)) {
-    framesPerSecond = 25;
-    sinelon();
-  } else {
-    framesPerSecond = 16;
-    sinelon();
-  }
+  framesPerSecond = 16;
+  sinelon();
 }
 
-void setMidChaosMode(byte peopleCount) {
+void setMidChaosMode() {
   currentMode = modeMidChaos;
-  if ((peopleCount == 2) || (peopleCount == 6)) {
-    framesPerSecond = 12;
-    sinelon();
-  } else {
-    framesPerSecond = 9;
-    sinelon();
-  }
+  framesPerSecond = 12;
+  sinelon();
 }
 
-void setLowChaosMode(byte peopleCount) {
+void setLowChaosMode() {
   currentMode = modeLowChaos;
   framesPerSecond = 30;
   sinelon();
 }
 
-void setRainbowBreathingMode(byte peopleCount) {
+void setRainbowBreathingMode() {
   if (currentMode != modeRainbowBreathing) {
     for (uint16_t i = 0; i < 100; i++) {
       rainbowBreathing(leds, NUM_LEDS, 2);
         FastLED.show();
-        FastLED.delay(5);
+        FastLED.delay(10);
     }
   }
   currentMode = modeRainbowBreathing;
   framesPerSecond = 30;
   rainbowBreathing( leds, NUM_LEDS, 2 );
+}
+
+void setBreathingMode() {
+  if (currentMode != modeBreathing) {
+    for (uint16_t i = 0; i < 100; i++) {
+        breathing(leds, NUM_LEDS, 2);
+        FastLED.show();
+        FastLED.delay(10);
+    }
+  }
+  currentMode = modeBreathing;
+  framesPerSecond = 30;
+  breathing(leds, NUM_LEDS, 2);
 }
 
 void setTwinkleMode(byte peopleCount) {
@@ -314,7 +323,6 @@ void setTwinkleMode(byte peopleCount) {
   } else {
     chanceOfTwinkle = 0;
   }
-  
   if (currentMode != modeTwinkle) {
       for ( uint16_t i = 0; i < 100; i++) {
           fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
@@ -323,7 +331,7 @@ void setTwinkleMode(byte peopleCount) {
       }
   }
   currentMode = modeTwinkle;
-  framesPerSecond = 30;
+  framesPerSecond = 40;
   twinkle(leds, chanceOfTwinkle);
 }
 
@@ -332,7 +340,7 @@ void setDarkMode() {
       for ( uint16_t i = 0; i < 100; i++) {
           fadeToBlackBy(leds, NUM_LEDS, BRIGHTNESS*0.1);
           FastLED.show();
-          FastLED.delay(5);
+          FastLED.delay(10);
       }
       for ( uint16_t i = 0; i < NUM_LEDS; i++) {
         leds[0] = CRGB::Black;
@@ -385,22 +393,23 @@ void rainbowBreathing( CRGB* L, uint16_t N, uint8_t fadeAmount ) {
     //beatsin16 is a function on the FastLED library generating sinwave, (5) is bpm, (0,255) is value range.
     //value range will create the breathing effect 
     int pos = beatsin16( 5, 55, BRIGHTNESS ); // generating the sinwave 
-//    fill_solid(leds, NUM_LEDS, CHSV( gHue, 255, pos )); // CHSV (hue, saturation, value);
-    // shifting the HUE value by incrementing every millisecond this creates the spectrum wave
-  for( uint16_t i = 0; i < N; i++) {
-    CHSV hsv( gHue+(i*7), 255, pos);
-    CRGB rgb;
-    hsv2rgb_rainbow( hsv, rgb);
-    fadeTowardColor( L[i], rgb, fadeAmount);
-  }
+     // shifting the HUE value by incrementing every millisecond this creates the spectrum wave
+    for( uint16_t i = 0; i < N; i++) {
+      CHSV hsv( gHue+(i*7), 255, pos);
+      CRGB rgb;
+      hsv2rgb_rainbow( hsv, rgb);
+      fadeTowardColor( L[i], rgb, fadeAmount);
+    }
 }
 
 void breathing( CRGB* L, uint16_t N, uint8_t fadeAmount ) {
     //beatsin16 is a function on the FastLED library generating sinwave, (5) is bpm, (0,255) is value range.
     //value range will create the breathing effect 
-    int pos = beatsin16( 5, 55, BRIGHTNESS ); // generating the sinwave 
-    fill_solid(leds, NUM_LEDS, CHSV( gHue, 255, pos )); // CHSV (hue, saturation, value);
-    // shifting the HUE value by incrementing every millisecond this creates the spectrum wave
+    int pos = beatsin16( 5, 55, 200 ); // generating the sinwave 
+    fill_solid(leds, NUM_LEDS, CHSV( 160, 255, pos )); // CHSV (hue, saturation, value);
+    for( uint16_t i = 0; i < N; i++) {
+      fadeTowardColor( L[i], CHSV( 160, 255, pos ), fadeAmount);
+    }
 }
 
 void sinelon() {   // a colored dot sweeping back and forth, with fading trails
