@@ -419,7 +419,7 @@ void sinelon() {   // a colored dot sweeping back and forth, with fading trails
 
   if (currentMode == modeHighChaos) 
   {
-    pos = random8(NUM_LEDS);
+    correctedPos = random8(NUM_LEDS);
     myhue = random16(255);
     if (myhue < 100) {
       myhue = random16(160,224);
@@ -427,12 +427,12 @@ void sinelon() {   // a colored dot sweeping back and forth, with fading trails
       myhue = random16(96);
     } 
   } else if (currentMode == modeMidChaos) {
-    pos = random8(NUM_LEDS);
+    correctedPos = random8(NUM_LEDS);
     myhue = 0;
     myhue++;
-//    if (myhue == 255) {
-//      myhue = 1;
-//    }
+    //    if (myhue == 255) {
+    //      myhue = 1;
+    //    }
   } else if (currentMode == modeLowChaos) 
   {
     pos = beatsin16( 18, 0, NUM_LEDS-1 );
