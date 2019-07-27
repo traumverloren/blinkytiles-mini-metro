@@ -8,8 +8,8 @@
 
 SoftwareSerial HWSERIAL(6,7); // RX, TX
 
-#define ACTIVATED LOW          // button is active low (HIGH = 1, LOW = 0)
-#define BUTTON_PIN 10          // Connect the button to GND and one of the pins. 
+#define ACTIVATED   LOW      // button is active low (HIGH = 1, LOW = 0)
+#define BUTTON_PIN  10       // Connect the button to GND and one of the pins. 
 #define LED_PIN     3
 #define NUM_LEDS    7
 #define LED_TYPE    DMXSIMPLE
@@ -63,12 +63,12 @@ uint8_t PixelState[NUM_LEDS];
 //
 CRGBPalette16 currentPalette;
 CRGBPalette16 targetPalette;
-TBlendType    currentBlending;                                // NOBLEND or LINEARBLEND
+TBlendType    currentBlending;                      // NOBLEND or LINEARBLEND
 
 // Define variables used by the sequences.
-uint8_t thisfade =  30;                                       // How quickly does it fade? Lower = slower fade rate.
-uint8_t  thissat = 255;                                       // The saturation, where 255 = brilliant colours.
-uint8_t  thisbri = 255;                                       // Brightness of a sequence.
+uint8_t thisfade =  30;                             // How quickly does it fade? Lower = slower fade rate.
+uint8_t  thissat = 255;                             // The saturation, where 255 = brilliant colours.
+uint8_t  thisbri = 255;                             // Brightness of a sequence.
 int        myhue =   0;
 
 //
@@ -128,6 +128,7 @@ void loop() {
         if (longPressActive == true) {
           longPressActive = false;
         } else {
+          Serial.println("Short press!!!");
           shortButtonPress();
         }
         buttonActive = false;
@@ -255,6 +256,7 @@ void setProgram() {
           setDarkMode();
         }
     } else {
+        Serial.println(peopleCount);
         if (peopleCount > 6) { //6+ Chaotic, frequently bouncing no color order
             setHighChaosMode();
         } else if (peopleCount == 6) { //6 Less Chaotic, has rainbow color order
@@ -265,7 +267,7 @@ void setProgram() {
             setRainbowBreathingMode();
         } else if (peopleCount == 3) { //3 All gently lit blue with in/out dim/brighten
             setBreathingMode();
-        } else if ((peopleCount == 2) || (peopleCount == 1)) { //1-2 Go to all blue with twinkle alternating
+        } else if (peopleCount == 1 || peopleCount == 2) { //1-2 Go to all blue with twinkle alternating
             setTwinkleMode(peopleCount);
         } else if (peopleCount == 0) { //0 Go dark
             setDarkMode();
@@ -275,13 +277,13 @@ void setProgram() {
 
 void setHighChaosMode() {
   currentMode = modeHighChaos;
-  framesPerSecond = 16;
+  framesPerSecond = 18;
   sinelon();
 }
 
 void setMidChaosMode() {
   currentMode = modeMidChaos;
-  framesPerSecond = 12;
+  framesPerSecond = 10;
   sinelon();
 }
 
@@ -293,7 +295,7 @@ void setLowChaosMode() {
 
 void setRainbowBreathingMode() {
   if (currentMode != modeRainbowBreathing) {
-    for (uint16_t i = 0; i < 100; i++) {
+    for (uint16_t i = 0; i < 150; i++) {
       rainbowBreathing(leds, NUM_LEDS, 2);
         FastLED.show();
         FastLED.delay(10);
@@ -306,7 +308,7 @@ void setRainbowBreathingMode() {
 
 void setBreathingMode() {
   if (currentMode != modeBreathing) {
-    for (uint16_t i = 0; i < 100; i++) {
+    for (uint16_t i = 0; i < 150; i++) {
         breathing(leds, NUM_LEDS, 2);
         FastLED.show();
         FastLED.delay(10);
@@ -324,7 +326,7 @@ void setTwinkleMode(byte peopleCount) {
     chanceOfTwinkle = 0;
   }
   if (currentMode != modeTwinkle) {
-      for ( uint16_t i = 0; i < 100; i++) {
+      for ( uint16_t i = 0; i < 120; i++) {
           fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
           FastLED.show();
           FastLED.delay(10);
@@ -337,14 +339,14 @@ void setTwinkleMode(byte peopleCount) {
 
 void setDarkMode() {
   if (currentMode != modeDark) {
-      for ( uint16_t i = 0; i < 100; i++) {
+      for ( uint16_t i = 0; i < 50; i++) {
           fadeToBlackBy(leds, NUM_LEDS, BRIGHTNESS*0.1);
           FastLED.show();
-          FastLED.delay(10);
+          FastLED.delay(20);
       }
-      for ( uint16_t i = 0; i < NUM_LEDS; i++) {
-        leds[0] = CRGB::Black;
-      }
+  }
+  for ( uint16_t i = 0; i < NUM_LEDS; i++) {
+    leds[0] = CRGB::Black;
   }
   currentMode = modeDark;
 }
