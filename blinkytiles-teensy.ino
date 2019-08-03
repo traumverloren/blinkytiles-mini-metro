@@ -81,10 +81,10 @@ CHSV BASE_COLOR(gHue, 255, 50);
 CHSV PEAK_COLOR(gHue, 255, BRIGHTNESS);
 
 // Amount to increment the color by each loop as it gets brighter:
-CHSV DELTA_COLOR_UP(gHue, 255, 14);
+CHSV DELTA_COLOR_UP(gHue, 255, 12);
 
 // Amount to decrement the color by each loop as it gets dimmer:
-CHSV DELTA_COLOR_DOWN(gHue, 255, 20);
+CHSV DELTA_COLOR_DOWN(gHue, 255, 18);
 
 // Chance of each pixel starting to brighten up.  
 // 1 or 2 = a few brightening pixels at a time.
@@ -215,6 +215,7 @@ void recvBytesWithStartEndMarkers() {
         if (recvInProgress == true) {
             if (rb != endMarker) {
                 peopleCount = rb;
+                Serial.println(peopleCount);
             }
             else {
                 recvInProgress = false;
@@ -295,27 +296,27 @@ void setLowChaosMode() {
 
 void setRainbowBreathingMode() {
   if (currentMode != modeRainbowBreathing) {
-    for (uint16_t i = 0; i < 150; i++) {
+    for (uint16_t i = 0; i < 200; i++) {
       rainbowBreathing(leds, NUM_LEDS, 2);
         FastLED.show();
         FastLED.delay(10);
     }
   }
   currentMode = modeRainbowBreathing;
-  framesPerSecond = 30;
+  framesPerSecond = 60;
   rainbowBreathing( leds, NUM_LEDS, 2 );
 }
 
 void setBreathingMode() {
   if (currentMode != modeBreathing) {
-    for (uint16_t i = 0; i < 150; i++) {
+    for (uint16_t i = 0; i < 200; i++) {
         breathing(leds, NUM_LEDS, 2);
         FastLED.show();
         FastLED.delay(10);
     }
   }
   currentMode = modeBreathing;
-  framesPerSecond = 30;
+  framesPerSecond = 60;
   breathing(leds, NUM_LEDS, 2);
 }
 
@@ -326,14 +327,14 @@ void setTwinkleMode(byte peopleCount) {
     chanceOfTwinkle = 0;
   }
   if (currentMode != modeTwinkle) {
-      for ( uint16_t i = 0; i < 120; i++) {
+      for ( uint16_t i = 0; i < 200; i++) {
           fadeTowardColor( leds, NUM_LEDS, BASE_COLOR, 2);
           FastLED.show();
           FastLED.delay(10);
       }
   }
   currentMode = modeTwinkle;
-  framesPerSecond = 40;
+  framesPerSecond = 60;
   twinkle(leds, chanceOfTwinkle);
 }
 
