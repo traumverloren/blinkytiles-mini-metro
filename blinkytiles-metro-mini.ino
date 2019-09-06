@@ -2,11 +2,21 @@
 #include <FastLED.h>
 #include <SoftwareSerial.h>
 
+// Programmer: USBtinyISP
+// Board: Arduino Genuino/Uno
+
 #if FASTLED_VERSION < 3001000
 #error "Requires FastLED 3.1 or later; check github for latest code."
 #endif
 
 SoftwareSerial HWSERIAL(6,7); // RX, TX
+
+
+//--------------Blinkytiles Wire guide:-------------
+// For reference, the connections on the side of the BlinkyTile are:
+// [gnd] [power] [data] [power] [gnd]
+//--------------------------------------------------
+
 
 #define ACTIVATED   LOW      // button is active low (HIGH = 1, LOW = 0)
 #define BUTTON_PIN  10       // Connect the button to GND and one of the pins. 
@@ -347,7 +357,7 @@ void setDarkMode() {
       }
   }
   for ( uint16_t i = 0; i < NUM_LEDS; i++) {
-    leds[0] = CRGB::Black;
+    leds[i] = CRGB::Black;
   }
   currentMode = modeDark;
 }
