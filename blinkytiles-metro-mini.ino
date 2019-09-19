@@ -259,11 +259,11 @@ void setProgram() {
             setLowChaosMode();
         } else if (peopleCount == 3) { //3 All gently lit rotating rainbow with in/out dim/brighten
             setRainbowBreathingMode();
-        } else if (peopleCount == 4) { //4 All gently blue with in/out dim/brighten
+        } else if (peopleCount == 4) { //4 All blue with gentle in/out dim/brighten
             setBreathingMode();
-        } else if ((peopleCount == 5) || (peopleCount == 6)) { //5-6 Go to all blue with twinkle alternating
+        } else if ((peopleCount == 5) || (peopleCount == 6)) { //5-6 Go to blue with 0-1 twinkle alternating
             setTwinkleMode(peopleCount);
-        } else if (peopleCount > 6) { //6+? Go to all dim blue
+        } else if (peopleCount > 6) { //6+? Go di,
           setDarkMode();
         }
     } else {
